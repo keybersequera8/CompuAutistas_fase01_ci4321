@@ -1,8 +1,18 @@
 // src/ constants.ts: constates de geometría, colores y físicas del juego
 // Usado por el ciclo principal y generadores para crear las primitivas 3D de la escena.
 
-/** Background color #1b1e2b as linear floats in [0, 1]. */
-export const CLEAR_COLOR: readonly [number, number, number, number] = [0x1b / 255, 0x1e / 255, 0x2b / 255, 1];
+// Color del cielo 
+export const CLEAR_COLOR: readonly [number, number, number, number] = [0.53, 0.81, 0.92, 1];
+
+// Color del suelo 
+export const GROUND_COLOR: readonly [number, number, number, number] = [0.55, 0.34, 0.19, 1];
+
+// Color gris oscuro de la torreta
+export const TURRET_COLOR: readonly [number, number, number, number] = [0.25, 0.25, 0.25, 1];
+
+// Colores de las barras de fuerza
+export const BARRA_ENCENDIDA: readonly [number, number, number, number] = [0.1, 0.95, 0.2, 1];
+export const BARRA_APAGADA: readonly [number, number, number, number] = [0.02, 0.2, 0.06, 1];
 
 /** Drawing buffer size in pixels, 4:3. CSS scales the canvas to fit the window; the buffer stays fixed. */
 export const CANVAS_WIDTH = 1024;
@@ -61,6 +71,31 @@ export const CUBE_INDICES = new Uint16Array([
   16, 17, 18,  16, 18, 19, // +Y
   20, 21, 22,  20, 22, 23, // -Y
 ]);
+
+// Hacemos los puntos del cañon
+const lados = 16;
+const verticesCañon: number[] = [];
+const indicesCañon: number[] = [];
+
+for (let i = 0; i <= lados; i++) {
+  let angulo = i * 2 * Math.PI / lados;
+  let x = Math.cos(angulo);
+  let y = Math.sin(angulo);
+
+  verticesCañon.push(x / 2, y / 2, -0.5, x, y, 0);
+  verticesCañon.push(x / 2, y / 2, 0.5, x, y, 0);
+}
+
+// Hacemos los triangulos
+for (let i = 0; i < lados; i++) {
+  let p = i * 2;
+
+  indicesCañon.push(p, p + 2, p + 1);
+  indicesCañon.push(p + 1, p + 2, p + 3);
+}
+
+export const CAÑON_VERTICES = new Float32Array(verticesCañon);
+export const CAÑON_INDICES = new Uint16Array(indicesCañon);
 
 export const STRIDE_BYTES = 6 * 4; // 4 bytes per float (Float32)
 export const NORMAL_OFFSET_BYTES = 3 * 4;

@@ -6,16 +6,20 @@ import {
   CANVAS_HEIGHT,
   CANVAS_WIDTH,
   CLEAR_COLOR,
-  COLORS,
   CUBE_INDICES,
   CUBE_VERTICES,
+  GROUND_COLOR,
+  BARRA_ENCENDIDA,
+  BARRA_APAGADA,
+  TURRET_COLOR,
+  CAÑON_VERTICES,
+  CAÑON_INDICES,
   NORMAL_OFFSET_BYTES,
   STRIDE_BYTES,
 } from './constants';
 
 type FF = ReturnType<typeof createFixedFunction>;
-
-const ROTATION_SPEED = 0.8; 
+ 
 const MAX_DT = 0.1; // seconds
 
 // Step 1. Get the WebGL2 context.
@@ -78,7 +82,7 @@ function setupScene(ff: FF): void {
   ff.setLight(0, { position: [1, 1, 0.5, 0], diffuse: [1, 1, 1, 1] });
   ff.enableLight(0);
 
-  const view = mat4.lookAt(mat4.create(), [0, 1.5, 4], [0, 0, 0], [0, 1, 0]);
+  const view = mat4.lookAt(mat4.create(), [0, 6, 21], [0, 1, -8], [0, 1, 0]);
   ff.setViewMatrix(view);
   // Aspect = width / height of the drawing buffer (4:3). A wrong aspect stretches the cube.
   const projection = mat4.perspective(mat4.create(), Math.PI / 4, CANVAS_WIDTH / CANVAS_HEIGHT, 0.1, 100);
@@ -94,55 +98,188 @@ function setupScene(ff: FF): void {
 // ---------------------------------------------------------------------------
 
 // Game state: everything the simulation needs, nothing about WebGL.
-const state = { angle: 0, colorIndex: 0, rotating: true };
+const state = {x: 0, anguloCañon: 45, movimientoX: 0, movimientoAngulo: 0, fuerza: 1};
 
 // Input: the keydown listener only records presses. processInput handles them later, once per frame.
-let spacePressed = false;
-let rPressed = false;
+
+// Guardamos las flechas
+let izq = false;
+let der = false;
+let subir = false;
+let bajar = false;
+// Guardamos la tecla R
+let rPresionada = false;
+
+// Vemos que flecha se esta usando
+function cambiarFlecha(e: KeyboardEvent, valor: boolean): void {
+  if (e.code === 'ArrowLeft') izq = valor;
+  else if (e.code === 'ArrowRight') der = valor;
+  else if (e.code === 'ArrowUp') subir = valor;
+  else if (e.code === 'ArrowDown') bajar = valor;
+  else return;
+
+  e.preventDefault();
+}
 
 function setupInput(): void {
   window.addEventListener('keydown', (e) => {
-    if (e.code === 'Space') e.preventDefault(); // stops the page from scrolling
-    if (e.repeat) return; // holding a key counts as one press
-    if (e.code === 'Space') spacePressed = true;
-    if (e.code === 'KeyR') rPressed = true;
+    cambiarFlecha(e, true);
+    // Vemos si se presiono R
+    if (e.code === 'KeyR' && !e.repeat) {
+      rPresionada = true;
+    }
+    // Cambiamos el nivel de fuerza
+    if (e.code === 'Digit1') state.fuerza = 1;
+    if (e.code === 'Digit2') state.fuerza = 2;
+    if (e.code === 'Digit3') state.fuerza = 3;
   });
-  // Research: key-state polling with edge detection. Store which keys are down, and compare with
-  // the last frame: pressed = down now && !down last frame. When does it fit better than events?
+
+  window.addEventListener('keyup', (e) => {
+    cambiarFlecha(e, false);
+  });
 }
 
-// Loop phase 1. Space selects the next color. R toggles the rotation.
-// Each flag is cleared after use, so each press counts once.
-//
+// Vemos hacia donde se quiere mover el tanque
 function processInput(): void {
-  if (spacePressed) state.colorIndex = (state.colorIndex + 1) % COLORS.length;
-  if (rPressed) state.rotating = !state.rotating;
-  spacePressed = false;
-  rPressed = false;
+  state.movimientoX = 0;
+  state.movimientoAngulo = 0;
+
+  if (izq) state.movimientoX = -1;
+  if (der) state.movimientoX = 1;
+
+  if (subir) state.movimientoAngulo = 1;
+  if (bajar) state.movimientoAngulo = -1;
+  // Reiniciamos el tanque con R
+  if (rPresionada) {state.x = 0; state.anguloCañon = 45; rPresionada = false;}
 }
 
-// Loop phase 2. 
 function update(dt: number): void {
-  if (state.rotating) state.angle += ROTATION_SPEED * dt; // paused: the angle keeps its value
+  
+  // Movemos el tanque
+  if (state.movimientoX < 0) state.x -= 5 * dt;
+  if (state.movimientoX > 0) state.x += 5 * dt;
+
+  if (state.x < -10) state.x = -10;
+  if (state.x > 10) state.x = 10;
+
+  // Movemos el cañon
+  if (state.movimientoAngulo > 0) state.anguloCañon += 40 * dt;
+  if (state.movimientoAngulo < 0) state.anguloCañon -= 40 * dt;
+
+  if (state.anguloCañon < 5) state.anguloCañon = 5;
+  if (state.anguloCañon > 90) state.anguloCañon = 90;
 }
 
-// Loop phase 3. Draw the current state. render reads the state and never changes it.
-// setMaterial runs every frame, so FF re-uploads the material each frame. That costs a few
-// uniforms and keeps render simple. Exercise: set the material only when colorIndex changes.
+// Usamos estas matrices para colocar las figuras
 const model = mat4.create();
 const normalMatrix = mat3.create();
 
-function render(gl: WebGL2RenderingContext, ff: FF, vao: WebGLVertexArrayObject): void {
-  const color = COLORS[state.colorIndex];
-  ff.setMaterial({ ambient: color, diffuse: color }); // specular stays at the FF default (0)
-
-  mat4.fromYRotation(model, state.angle);
-  ff.setModelMatrix(model);
-  // FF needs the normal matrix for lit normals: setModelMatrix does not update it.
-  ff.setNormalMatrix(mat3.normalFromMat4(normalMatrix, model));
-
+function render(gl: WebGL2RenderingContext, ff: FF, vao: WebGLVertexArrayObject, vaoCañon: WebGLVertexArrayObject): void {
+  
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
   gl.bindVertexArray(vao);
+
+  // Le ponemos el color al tanque
+  ff.setMaterial({
+    ambient: TURRET_COLOR,
+    diffuse: TURRET_COLOR
+  });
+
+  // Hacemos la base del tanque con el cubo
+  const altoBase = 0.65;
+
+  mat4.identity(model);
+  mat4.translate(model, model, [state.x, altoBase / 2, 0]);
+  mat4.scale(model, model, [1.6, altoBase, 1.2]);
+
+  mat3.normalFromMat4(normalMatrix, model);
+  ff.setModelMatrix(model);
+  ff.setNormalMatrix(normalMatrix);
+
+  ff.drawElements(gl.TRIANGLES, CUBE_INDICES.length, gl.UNSIGNED_SHORT, 0);
+
+  // Hacemos la parte de arriba con otro cubo
+  const altoArriba = 0.45;
+
+  mat4.identity(model);
+  mat4.translate(model, model, [state.x, altoBase + altoArriba / 2, 0]);
+  mat4.scale(model, model, [0.9, altoArriba, 0.9]);
+
+  mat3.normalFromMat4(normalMatrix, model);
+  ff.setModelMatrix(model);
+  ff.setNormalMatrix(normalMatrix);
+
+  ff.drawElements(gl.TRIANGLES, CUBE_INDICES.length, gl.UNSIGNED_SHORT, 0);
+
+  // Hacemos el cañon con el cilindro
+  
+  mat4.identity(model);
+  mat4.translate(model, model, [state.x, 0.93, -0.3]);
+  mat4.rotateX(model, model, state.anguloCañon * Math.PI / 180);
+  mat4.translate(model, model, [0, 0, -0.65]);
+  mat4.scale(model, model, [0.3, 0.3, 1.3]);
+
+  mat3.normalFromMat4(normalMatrix, model);
+  ff.setModelMatrix(model);
+  ff.setNormalMatrix(normalMatrix);
+
+  gl.bindVertexArray(vaoCañon);
+  ff.drawElements(gl.TRIANGLES, CAÑON_INDICES.length, gl.UNSIGNED_SHORT, 0);
+  
+  // Hacemos las 3 barras del tanque
+  gl.bindVertexArray(vao);
+
+  let barra = 1;
+  let y = 0.17;
+
+  while (barra <= 3) {
+    let color = BARRA_APAGADA;
+
+    if (barra <= state.fuerza) {
+      color = BARRA_ENCENDIDA;
+    }
+
+    mat4.identity(model);
+    mat4.translate(model, model, [state.x, y, 0.62]);
+    mat4.scale(model, model, [0.65, 0.1, 0.1]);
+
+    mat3.normalFromMat4(normalMatrix, model);
+    ff.setModelMatrix(model);
+    ff.setNormalMatrix(normalMatrix);
+
+    ff.setMaterial({
+      ambient: color,
+      diffuse: color
+    });
+
+    ff.drawElements(gl.TRIANGLES, CUBE_INDICES.length, gl.UNSIGNED_SHORT, 0);
+
+    barra = barra + 1;
+    y = y + 0.16;
+  }
+
+  // Creamos el suelo con el cubo
+  const ancho = 24;
+  const alto = 0.2;
+  const largo = 20;
+
+  mat4.identity(model);
+  mat4.translate(model, model, [0, -0.1, -4]);
+  mat4.scale(model, model, [ancho, alto, largo]);
+
+  // Calculamos las normales y actualizamos las matrices
+  mat3.normalFromMat4(normalMatrix, model);
+  ff.setModelMatrix(model);
+  ff.setNormalMatrix(normalMatrix);
+
+  // Le ponemos el color marron y dibujamos el suelo
+  ff.setMaterial({
+    ambient: GROUND_COLOR,
+    diffuse: GROUND_COLOR
+  });
+
+  gl.bindVertexArray(vao);
+  
   ff.drawElements(gl.TRIANGLES, CUBE_INDICES.length, gl.UNSIGNED_SHORT, 0);
 }
 
@@ -152,11 +289,14 @@ function run(canvas: HTMLCanvasElement): void {
   const vertices = createVertexBuffer(gl, CUBE_VERTICES);
   const indices = createIndexBuffer(gl, CUBE_INDICES);
   const vao = createVAO(gl, vertices, indices);
+  // Preparamos el cañon
+  const verticesCañon = createVertexBuffer(gl, CAÑON_VERTICES);
+  const indicesCañon = createIndexBuffer(gl, CAÑON_INDICES);
+  const vaoCañon = createVAO(gl, verticesCañon, indicesCañon);
   setupState(gl, canvas);
   setupScene(ff);
   setupInput();
 
-  state.colorIndex = 2;
   let last: number | null = null; // set by the first frame, so dt starts at 0
   function frame(now: number): void {
     if (last === null) last = now;
@@ -165,7 +305,7 @@ function run(canvas: HTMLCanvasElement): void {
     last = now;
     processInput();
     update(dt);
-    render(gl, ff, vao);
+    render(gl, ff, vao, vaoCañon);
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);

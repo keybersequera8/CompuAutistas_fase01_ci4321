@@ -16,7 +16,14 @@ import {
   CAÑON_INDICES,
   NORMAL_OFFSET_BYTES,
   STRIDE_BYTES,
+  COLOR_PROYECTIL,
+  RADIO_PROYECTIL,
 } from './constants';
+
+// Importa el generador de mallas esféricas y la clase Proyectil
+import { generarEsfera } from './esfera';
+import { Proyectil } from './proyectil';
+
 
 type FF = ReturnType<typeof createFixedFunction>;
  
@@ -100,6 +107,9 @@ function setupScene(ff: FF): void {
 // Game state: everything the simulation needs, nothing about WebGL.
 const state = {x: 0, anguloCañon: 45, movimientoX: 0, movimientoAngulo: 0, fuerza: 1};
 
+// Instancia el proyectil principal del juego para controlar su estado y posición
+const proyectil = new Proyectil();
+
 // Input: the keydown listener only records presses. processInput handles them later, once per frame.
 
 // Guardamos las flechas
@@ -149,8 +159,12 @@ function processInput(): void {
 
   if (subir) state.movimientoAngulo = 1;
   if (bajar) state.movimientoAngulo = -1;
-  // Reiniciamos el tanque con R
-  if (rPresionada) {state.x = 0; state.anguloCañon = 45; rPresionada = false;}
+  // Reiniciamos el tanque y devuelve el proyectil al tubo con R
+  if (rPresionada) {
+    state.x = 0; 
+    state.anguloCañon = 45;
+    proyectil.reiniciar(state.x, state.anguloCañon); 
+    rPresionada = false;}
 }
 
 function update(dt: number): void {
@@ -168,13 +182,23 @@ function update(dt: number): void {
 
   if (state.anguloCañon < 5) state.anguloCañon = 5;
   if (state.anguloCañon > 90) state.anguloCañon = 90;
+
+  // Sincroniza la posición del proyectil con al punta del cańón en reposo
+  proyectil.actualizarEnReposo(state.x, state.anguloCañon);
 }
 
 // Usamos estas matrices para colocar las figuras
 const model = mat4.create();
 const normalMatrix = mat3.create();
 
-function render(gl: WebGL2RenderingContext, ff: FF, vao: WebGLVertexArrayObject, vaoCañon: WebGLVertexArrayObject): void {
+function render(
+  gl: WebGL2RenderingContext, 
+  ff: FF, 
+  vao: WebGLVertexArrayObject, 
+  vaoCañon: WebGLVertexArrayObject,
+  vaoProyectil: WebGLVertexArrayObject,
+  numIndicesProyectil: number
+): void {
   
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
   gl.bindVertexArray(vao);
@@ -281,6 +305,23 @@ function render(gl: WebGL2RenderingContext, ff: FF, vao: WebGLVertexArrayObject,
   gl.bindVertexArray(vao);
   
   ff.drawElements(gl.TRIANGLES, CUBE_INDICES.length, gl.UNSIGNED_SHORT, 0);
+
+  // Posiciona la matriz de modelo en las coordenadas actuales del proyectil
+  mat4.identity(model);
+  mat4.translate(model, model, proyectil.posicion);
+
+  // Calcula la matriz normal y actualiza las matrices en el pipeline gráfico
+  mat3.normalFromMat4(normalMatrix, model);
+  ff.setModelMatrix(model);
+  ff.setNormalMatrix(normalMatrix);
+
+  // Asigna el material negro al proyectil y dibuja su malla esférica
+  ff.setMaterial({
+    ambient: COLOR_PROYECTIL,
+    diffuse: COLOR_PROYECTIL,
+  });
+  gl.bindVertexArray(vaoProyectil);
+  ff.drawElements(gl.TRIANGLES, numIndicesProyectil, gl.UNSIGNED_SHORT, 0);
 }
 
 function run(canvas: HTMLCanvasElement): void {
@@ -293,6 +334,15 @@ function run(canvas: HTMLCanvasElement): void {
   const verticesCañon = createVertexBuffer(gl, CAÑON_VERTICES);
   const indicesCañon = createIndexBuffer(gl, CAÑON_INDICES);
   const vaoCañon = createVAO(gl, verticesCañon, indicesCañon);
+  // Genera la geometría de la esfera para el proyectil y crea su VAO
+  const mallaProyectil = generarEsfera(RADIO_PROYECTIL);
+  const verticesProyectil = createVertexBuffer(gl, mallaProyectil.vertices);
+  const indicesProyectil = createIndexBuffer(gl, mallaProyectil.indices);
+  const vaoProyectil = createVAO(gl, verticesProyectil, indicesProyectil);
+
+  // Posiciona el proyectil en la punta del cańón antes del primer cuadro
+  proyectil.actualizarEnReposo
+
   setupState(gl, canvas);
   setupScene(ff);
   setupInput();
@@ -305,7 +355,7 @@ function run(canvas: HTMLCanvasElement): void {
     last = now;
     processInput();
     update(dt);
-    render(gl, ff, vao, vaoCañon);
+    render(gl, ff, vao, vaoCañon, vaoProyectil, mallaProyectil.indices.length);
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);

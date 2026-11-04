@@ -187,8 +187,11 @@ function processInput(): void {
   }
 }
 
-function update(dt: number): void {
-  
+// Actualiza el estado de al torreta y el proyectil en cada cuadro
+function update(t: Tiempo): void {
+  // Extrae el delta de tiempo en segundos para los cálculos cinemáticos
+  const dt = t.delta;
+
   // Movemos el tanque
   if (state.movimientoX < 0) state.x -= 5 * dt;
   if (state.movimientoX > 0) state.x += 5 * dt;
@@ -205,6 +208,9 @@ function update(dt: number): void {
 
   // Sincroniza la posición del proyectil con al punta del cańón en reposo
   proyectil.actualizarEnReposo(state.x, state.anguloCañon);
+
+  // Actualiza la trayectoria parabólica del proyectil si se encuentra en vuelo
+  proyectil.actualizar(t);
 }
 
 // Usamos estas matrices para colocar las figuras
@@ -379,7 +385,7 @@ function run(canvas: HTMLCanvasElement): void {
     }
     
     processInput();
-    update(tiempo.delta);
+    update(tiempo);
     render(gl, ff, vao, vaoCañon, vaoProyectil, mallaProyectil.indices.length);
     requestAnimationFrame(frame);
   }

@@ -2,7 +2,10 @@
 // Usado por el ciclo principal en main.ts para gestionar y renderizar la bala
 
 import { mat4, vec3 } from 'gl-matrix';
-import { RAPIDEZ_FUERZA } from './constants';
+// Importa las constantes físicas de gravedad y rapidez según nivel de fuerza
+import { GRAVEDAD, RAPIDEZ_FUERZA } from './constants';
+// Importa la clase Tiempo para consultar el delta del ciclo de juego
+import { Tiempo } from './tiempo'; 
 
 // Representa los estados posibles del proyectil durante la partida
 export type EstadoProyectil = 'disponible' | 'en_vuelo';
@@ -22,6 +25,12 @@ export class Proyectil {
     // Guarda las coordenadas de origen donde inició el disparo actual
     posicionInicial: [number, number, number] = [0, 0, 0];
 
+    // Almacena la magnitud escalar de la velocidad al momento del disparo
+    public  rapidez: number = 0;
+    // Almacena el vector unitario de dirección del disparo en 3D
+    public direccion: vec3 = vec3.fromValues(0, 0, 0);
+    // Registra la velocidad vertical actual afectada por la aceleración de la gravedad
+    public velocidadY: number = 0;
 
     // Inicializa un nuevo proyectil en el origen con estado "disponible"
     constructor() {
@@ -67,15 +76,22 @@ export class Proyectil {
 
         // Convierte el ángulo de elevación del cańón de grados a radianes
         const rad = (anguloGrados * Math.PI) / 180;
-        // Obtiene la rapidez escalar correspondiente al nivel de fuerza elegido
-        const rapidez = RAPIDEZ_FUERZA[nivelFuerza - 1];
+        
+        // Obtiene y guarda la rapidez escalar según el nivel de fuerza elegido
+        this.rapidez = RAPIDEZ_FUERZA[nivelFuerza - 1];
+
+        // Define el vector unitario de dirección según la inclinación del tubo
+        vec3.set(this.direccion, 0, Math.sin(rad), -Math.cos(rad));
 
         // Calcula y guarda las componentes del vector velocidad inicial en 3D
         this.velocidadInicial = [
             0,
-            Math.sin(rad) * rapidez,
-            -Math.cos(rad) * rapidez,
+            this.direccion[1] * this.rapidez,
+            this.direccion[2] * this.rapidez,
         ];
+
+        // Inicializa la velocidad vertical para aplicarle gravedad en cada cuadro
+        this.velocidadY = this.velocidadInicial[1];
     }
 
     // Reinicia el proyectil a su estado disponible y actualiza su posición de reposo
@@ -84,5 +100,20 @@ export class Proyectil {
         this.actualizarEnReposo(xTorreta, anguloGrados);
     }
 
-    // 
+    // Calcula y actualiza la posición parabólica del proyectil usando el tiempo delta
+    public actualizar(t: Tiempo): void {
+        // Ignora la actualización física si el proyectil no está volando
+        if (this.estado !== 'en_vuelo') return;
+
+        // Multiplica primero los escalares para optimizar el cálculo del desplazamiento
+        const desplazamiento = this.rapidez * t.delta;
+
+        // Avanza la posición en X y Z multiplicando escalar por dirección
+        this.posicion[0] += desplazamiento * this.direccion[0];
+        this.posicion[2] += desplazamiento * this.direccion[2];
+
+        // Actualiza la posición vertical y aplica la aceleración de la gravedad
+        this.posicion[1] += this.velocidadY * t.delta + 0.5 * GRAVEDAD * t.delta * t.delta;
+        this.velocidadY += GRAVEDAD * t.delta;
+    }
 }

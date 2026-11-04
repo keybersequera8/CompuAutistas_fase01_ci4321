@@ -170,9 +170,7 @@ function update(dt: number): void {
   if (state.anguloCañon > 90) state.anguloCañon = 90;
 }
 
-// Loop phase 3. Draw the current state. render reads the state and never changes it.
-// setMaterial runs every frame, so FF re-uploads the material each frame. That costs a few
-// uniforms and keeps render simple. Exercise: set the material only when colorIndex changes.
+// Usamos estas matrices para colocar las figuras
 const model = mat4.create();
 const normalMatrix = mat3.create();
 

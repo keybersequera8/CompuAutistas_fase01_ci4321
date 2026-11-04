@@ -1,4 +1,5 @@
-// Scene constants: geometry, colors and canvas settings. main.ts holds the WebGL code and the game loop.
+// src/ constants.ts: constates de geometría, colores y físicas del juego
+// Usado por el ciclo principal y generadores para crear las primitivas 3D de la escena.
 
 /** Background color #1b1e2b as linear floats in [0, 1]. */
 export const CLEAR_COLOR: readonly [number, number, number, number] = [0x1b / 255, 0x1e / 255, 0x2b / 255, 1];
@@ -63,3 +64,21 @@ export const CUBE_INDICES = new Uint16Array([
 
 export const STRIDE_BYTES = 6 * 4; // 4 bytes per float (Float32)
 export const NORMAL_OFFSET_BYTES = 3 * 4;
+
+// Color negro en formato RGBA para renderizar el proyectil
+export const COLOR_PROYECTIL: readonly [number, number, number, number] = [0, 0, 0, 1];
+
+// Color anaranjado rojizo en formato RGBA para los tres objetivos
+export const COLOR_OBJETIVO: readonly [number, number, number, number] = [1, 0.27, 0, 1];
+
+// Radio base para modelar la esfera del proyectil
+export const RADIO_PROYECTIL = 0.2;
+
+// Radio para las esferas de los objetivos flotantes
+export const RADIO_OBJETIVO = 0.5;
+
+// Aceleración gravitatoria terrestre en metros sobre segundos al cuadrado
+export const GRAVEDAD = -9.8;
+
+// Valores escalares de rapidez inicial para los niveles 1, 2 y 3
+export const RAPIDEZ_FUERZA: readonly [number, number, number] = [8.0, 12.0, 16.0];

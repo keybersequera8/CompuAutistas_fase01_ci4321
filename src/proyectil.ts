@@ -96,7 +96,17 @@ export class Proyectil {
 
     // Reinicia el proyectil a su estado disponible y actualiza su posición de reposo
     public reiniciar(xTorreta: number, anguloGrados: number): void {
+        // Restablece el estado para permitir un nuevo disparo
         this.estado = 'disponible';
+        // Reinicia la rapidez escalar a cero
+        this.rapidez = 0;
+        // Limpia la velocidad vertical acululada por la gravedad
+        this.velocidadY = 0;
+        // Limpia las componentes del vector de velocidad inicial
+        this.velocidadInicial = [0, 0, 0];
+        // Limpia el vector unitario de dirección del disparo
+        vec3.set(this.direccion, 0, 0, 0);
+        // Posiciona nuevamente la esfera en la punta del tubo
         this.actualizarEnReposo(xTorreta, anguloGrados);
     }
 

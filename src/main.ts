@@ -18,11 +18,16 @@ import {
   STRIDE_BYTES,
   COLOR_PROYECTIL,
   RADIO_PROYECTIL,
+  COLOR_OBJETIVO,
+  RADIO_OBJETIVO,
 } from './constants';
 
 // Importa el generador de mallas esféricas y la clase Proyectil
 import { generarEsfera } from './esfera';
 import { Proyectil } from './proyectil';
+// Importa las funciones de detección de colisiones contra suelo y esferas
+import { colisionanEsferas, colisionaConSuelo } from './colision';
+import { vec3 } from 'gl-matrix';
 
 // Importa el controlador de tiempo para gestionar el ciclo del juego
 import { Tiempo } from './tiempo';
@@ -112,6 +117,21 @@ const state = {x: 0, anguloCañon: 45, movimientoX: 0, movimientoAngulo: 0, fuer
 // Instancia el proyectil principal del juego para controlar su estado y posición
 const proyectil = new Proyectil();
 
+// Representa un blanco esférico flotante con su posición y estado de visibilidad
+interface Objetivo {
+  // Coordenadas (x, y, z) del centro del objetivo en el mundo
+  posicion: vec3;
+  // Indica si el objetivo aún no ha sido alcanzado y debe dibujarse
+  activo: boolean;
+}
+
+// Define los tres objetivos a distintas profundidades y alturas para cada fuerza
+const objetivos: Objetivo[] = [
+  { posicion: vec3.fromValues(-3, 2.0, -5.5), activo: true },
+  { posicion: vec3.fromValues(0, 3.5, -9.5), activo: true },
+  { posicion: vec3.fromValues(4, 5.0, -14.0), activo: true },
+];
+
 // Input: the keydown listener only records presses. processInput handles them later, once per frame.
 
 // Guardamos las flechas
@@ -172,9 +192,13 @@ function processInput(): void {
   if (bajar) state.movimientoAngulo = -1;
   // Reiniciamos el tanque y devuelve el proyectil al tubo con R
   if (rPresionada) {
-    state.x = 0; 
+    state.x = 0;
     state.anguloCañon = 45;
-    proyectil.reiniciar(state.x, state.anguloCañon); 
+    proyectil.reiniciar(state.x, state.anguloCañon);
+    // Reactiva todos los objetivos para reiniciar la partida
+    for (const objetivo of objetivos) {
+      objetivo.activo = true;
+    }
     rPresionada = false;
   }
 
@@ -211,6 +235,32 @@ function update(t: Tiempo): void {
 
   // Actualiza la trayectoria parabólica del proyectil si se encuentra en vuelo
   proyectil.actualizar(t);
+
+  // Evalúa colisiones únicamente cuando el proyectil está volando en la escena
+  if (proyectil.estado === 'en_vuelo') {
+    // Recarga el proyectil en la punta del cańón si golpea el suelo
+    if (colisionaConSuelo(proyectil.posicion)) {
+      proyectil.reiniciar(state.x, state.anguloCañon);
+    } else {
+      // Verifica si el proyectil alcanza alguno de los tres objetivos activos
+      for (const objetivo of objetivos) {
+        if (
+          objetivo.activo &&
+          colisionanEsferas(
+            proyectil.posicion,
+            RADIO_PROYECTIL,
+            objetivo.posicion,
+            RADIO_OBJETIVO
+          )
+        ) {
+          // Oculta el objetivo alcanza y recarga el proyectil
+          objetivo.activo = false;
+          proyectil.reiniciar(state.x, state.anguloCañon);
+          break;
+        }
+      }
+    }
+  }
 }
 
 // Usamos estas matrices para colocar las figuras
@@ -223,7 +273,9 @@ function render(
   vao: WebGLVertexArrayObject, 
   vaoCañon: WebGLVertexArrayObject,
   vaoProyectil: WebGLVertexArrayObject,
-  numIndicesProyectil: number
+  numIndicesProyectil: number,
+  vaoObjetivo: WebGLVertexArrayObject,
+  numIndicesObjetivo: number
 ): void {
   
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
@@ -341,13 +393,33 @@ function render(
   ff.setModelMatrix(model);
   ff.setNormalMatrix(normalMatrix);
 
-  // Asigna el material negro al proyectil y dibuja su malla esférica
+  // Asigna el color negro al proyectil y dibuja su malla esférica
   ff.setMaterial({
     ambient: COLOR_PROYECTIL,
     diffuse: COLOR_PROYECTIL,
   });
+
   gl.bindVertexArray(vaoProyectil);
   ff.drawElements(gl.TRIANGLES, numIndicesProyectil, gl.UNSIGNED_SHORT, 0);
+
+  // Asigna el color anaranjado rojizo y dibuja los objetivos activos
+  ff.setMaterial({
+    ambient: COLOR_OBJETIVO,
+    diffuse: COLOR_OBJETIVO,
+  });
+  gl.bindVertexArray(vaoObjetivo);
+
+  for (const objetivo of objetivos) {
+    // Omite el dibujado si el objetivo ya fue impactado por el proyectil
+    if (!objetivo.activo) continue;
+
+    mat4.identity(model);
+    mat4.translate(model, model, objetivo.posicion);
+    mat3.normalFromMat4(normalMatrix, model);
+    ff.setModelMatrix(model);
+    ff.setNormalMatrix(normalMatrix);
+    ff.drawElements(gl.TRIANGLES, numIndicesObjetivo, gl.UNSIGNED_SHORT, 0);
+  }
 }
 
 function run(canvas: HTMLCanvasElement): void {
@@ -365,6 +437,11 @@ function run(canvas: HTMLCanvasElement): void {
   const verticesProyectil = createVertexBuffer(gl, mallaProyectil.vertices);
   const indicesProyectil = createIndexBuffer(gl, mallaProyectil.indices);
   const vaoProyectil = createVAO(gl, verticesProyectil, indicesProyectil);
+  // Genera la malla esférica de los tres objetivos y crea su VAO
+  const mallaObjetivo = generarEsfera(RADIO_OBJETIVO);
+  const verticesObjetivo = createVertexBuffer(gl, mallaObjetivo.vertices);
+  const indicesObjetivo = createIndexBuffer(gl, mallaObjetivo.indices);
+  const vaoObjetivo = createVAO(gl, verticesObjetivo, indicesObjetivo);
 
   // Posiciona el proyectil en la punta del cańón antes del primer cuadro
   proyectil.actualizarEnReposo(state.x, state.anguloCañon);
@@ -386,7 +463,7 @@ function run(canvas: HTMLCanvasElement): void {
     
     processInput();
     update(tiempo);
-    render(gl, ff, vao, vaoCañon, vaoProyectil, mallaProyectil.indices.length);
+    render(gl, ff, vao, vaoCañon, vaoProyectil, mallaProyectil.indices.length, vaoObjetivo, mallaObjetivo.indices.length);
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);

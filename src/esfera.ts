@@ -35,7 +35,7 @@ export function generarEsfera(
             const sinTheta = Math.sin(theta);
 
             // Calcula la normal unitaria en la superficie de la esfera
-            const nx = sinTheta * consPhi;
+            const nx = sinTheta * cosPhi;
             const ny = sinPhi;
             const nz = cosTheta * cosPhi;
 

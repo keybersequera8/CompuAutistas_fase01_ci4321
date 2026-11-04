@@ -24,6 +24,8 @@ import {
 import { generarEsfera } from './esfera';
 import { Proyectil } from './proyectil';
 
+// Importa el controlador de tiempo para gestionar el ciclo del juego
+import { Tiempo } from './tiempo';
 
 type FF = ReturnType<typeof createFixedFunction>;
  
@@ -119,6 +121,8 @@ let subir = false;
 let bajar = false;
 // Guardamos la tecla R
 let rPresionada = false;
+// Registra si el jugador presionó Espacio para disparar
+let espacioPresionado = false;
 
 // Vemos que flecha se esta usando
 function cambiarFlecha(e: KeyboardEvent, valor: boolean): void {
@@ -138,6 +142,13 @@ function setupInput(): void {
     if (e.code === 'KeyR' && !e.repeat) {
       rPresionada = true;
     }
+
+    // Registra la intención de disparo al presionar la tecla Espacio sin repetición
+    if (e.code === 'Space' && !e.repeat) {
+      espacioPresionado = true;
+      e.preventDefault();
+    }
+
     // Cambiamos el nivel de fuerza
     if (e.code === 'Digit1') state.fuerza = 1;
     if (e.code === 'Digit2') state.fuerza = 2;
@@ -164,7 +175,16 @@ function processInput(): void {
     state.x = 0; 
     state.anguloCañon = 45;
     proyectil.reiniciar(state.x, state.anguloCañon); 
-    rPresionada = false;}
+    rPresionada = false;
+  }
+
+  // Acciona el disparo del proyectil si se presionó Espacio y está disponible
+  if (espacioPresionado) {
+    if (proyectil.estado == 'disponible') {
+      proyectil.disparar(state.anguloCañon, state.fuerza);
+    }
+    espacioPresionado = false;
+  }
 }
 
 function update(dt: number): void {
@@ -341,20 +361,25 @@ function run(canvas: HTMLCanvasElement): void {
   const vaoProyectil = createVAO(gl, verticesProyectil, indicesProyectil);
 
   // Posiciona el proyectil en la punta del cańón antes del primer cuadro
-  proyectil.actualizarEnReposo
+  proyectil.actualizarEnReposo(state.x, state.anguloCañon);
 
   setupState(gl, canvas);
   setupScene(ff);
   setupInput();
 
-  let last: number | null = null; // set by the first frame, so dt starts at 0
+  // Instancia el controlador de tiempo
+  let tiempo: Tiempo | null = null;
+
   function frame(now: number): void {
-    if (last === null) last = now;
-    // rAF pauses in hidden tabs. On return, (now - last) would be huge, so cap dt.
-    const dt = Math.min((now - last) / 1000, MAX_DT);
-    last = now;
+    // Inicializa el reloj en el primer cuadro o actualiza el tiempo transcurrido
+    if (tiempo === null) {
+      tiempo = new Tiempo(now);
+    } else {
+      tiempo.actualizar(now, MAX_DT);
+    }
+    
     processInput();
-    update(dt);
+    update(tiempo.delta);
     render(gl, ff, vao, vaoCañon, vaoProyectil, mallaProyectil.indices.length);
     requestAnimationFrame(frame);
   }
